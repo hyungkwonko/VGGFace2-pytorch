@@ -1,13 +1,14 @@
 import os
-import torchvision.datasets as datasets
-from PIL import Image
 import numpy as np
+from PIL import Image
+import torchvision.datasets as datasets
 from sklearn.preprocessing import MinMaxScaler
 
+INPUT_SIZE = 224
 
 class StyleGAN2_Data(datasets.ImageFolder):
 
-    def __init__(self, root='datasets/generated', split='train', transform=None):
+    def __init__(self, root='datasets/generated', split='train', transform=None, scale_size=-1):
         super(StyleGAN2_Data, self).__init__(root)
 
         assert os.path.exists(root), "root: {} not found.".format(root)
@@ -16,10 +17,29 @@ class StyleGAN2_Data(datasets.ImageFolder):
         self.split = split
         self.transform = transform
         self.scaler = MinMaxScaler(feature_range = (-1, 1))
+        self.scale_size = scale_size
     
+        if split == 'train':
+            self.labels_original = np.load(os.path.join(root, 'train', 'npy', 'landmarks.npy'))
+            if scale_size > 0:
+                self.labels = self.scale_label(self.labels_original / scale_size * INPUT_SIZE)
+            else:
+                self.labels = self.scale_label(self.labels_original)
+
+        if split == 'val':
+            self.labels_original = np.load(os.path.join(root, 'train', 'npy', 'landmarks.npy'))
+            if scale_size > 0:
+                self.scale_label(self.labels_original / scale_size * INPUT_SIZE)
+            else:
+                self.scale_label(self.labels_original)
+
+            self.labels_original = np.load(os.path.join(root, 'val', 'npy', 'landmarks.npy'))
+            if scale_size > 0:
+                self.labels = self.scale_val_label(self.labels_original / scale_size * INPUT_SIZE)
+            else:
+                self.labels = self.scale_val_label(self.labels_original)
+
         self.files = np.load(os.path.join(root, split, 'npy', 'files.npy'))
-        self.labels_original = np.load(os.path.join(root, split, 'npy', 'landmarks.npy'))
-        self.labels = self.scale_label(self.labels_original)
 
         assert len(self.files) == len(self.labels), f"[INFO] len(files)={len(self.files)} != len(labels)={len(self.files)}"
 
@@ -61,6 +81,13 @@ class StyleGAN2_Data(datasets.ImageFolder):
         return self.scaler.fit_transform(labels)
 
 
+    def scale_val_label(self, labels):
+        return self.scaler.transform(labels)
+
+
     def inv_scale_label(self, labels):
-        return np.rint(self.scaler.inverse_transform(labels))
+        if self.scale_size > 0:
+            return np.rint(self.scaler.inverse_transform(labels) * self.scale_size / INPUT_SIZE)
+        else:
+            return np.rint(self.scaler.inverse_transform(labels))
         
