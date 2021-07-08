@@ -82,7 +82,7 @@ class Trainer(object):
 
             gc.collect()
             if self.cuda:
-                imgs, target = imgs.cuda(), target.cuda(async=True)
+                imgs, target = imgs.cuda(), target.cuda(non_blocking=True)
             imgs = Variable(imgs, volatile=True)
             target = Variable(target, volatile=True)
 
@@ -175,7 +175,7 @@ class Trainer(object):
                 self.validate()
 
             if self.cuda:
-                imgs, target = imgs.cuda(), target.cuda(async=True)
+                imgs, target = imgs.cuda(), target.cuda(non_blocking=True)
             imgs, target = Variable(imgs), Variable(target)
 
             output = self.model(imgs)

@@ -7,7 +7,6 @@ import torch
 import torch.nn as nn
 
 import datasets
-import models.resnet as ResNet
 import models.senet as SENet
 from trainer import Trainer, Validator
 from extractor import Extractor
@@ -38,7 +37,7 @@ N_IDENTITY = 8631  # the number of identities in VGGFace2 for which ResNet and S
 def main():
     parser = argparse.ArgumentParser("PyTorch Face Recognizer")
     parser.add_argument('cmd', type=str,  choices=['train', 'test', 'extract'], help='train, test or extract')
-    parser.add_argument('--arch_type', type=str, default='resnet50_ft', help='model type',
+    parser.add_argument('--arch_type', type=str, default='senet50_scratch', help='model type',
                         choices=['resnet50_ft', 'senet50_ft', 'resnet50_scratch', 'senet50_scratch'])
     parser.add_argument('--dataset_dir', type=str, default='/path/to/dataset_directory', help='dataset directory')
     parser.add_argument('--log_file', type=str, default='/path/to/log_file', help='log file')
@@ -46,16 +45,15 @@ def main():
                         help='text file containing image files used for training')
     parser.add_argument('--test_img_list_file', type=str, default='/path/to/test_image_list.txt',
                         help='text file containing image files used for validation, test or feature extraction')
-    parser.add_argument('--meta_file', type=str, default='/path/to/identity_meta.csv', help='meta file')
-    parser.add_argument('--checkpoint_dir', type=str, default='/path/to/checkpoint_directory',
+    parser.add_argument('--meta_file', type=str, default='./assets/identity_meta.csv', help='meta file')
+    parser.add_argument('--checkpoint_dir', type=str, default='./ckpt',
                         help='checkpoints directory')
-    parser.add_argument('--feature_dir', type=str, default='/path/to/feature_directory',
+    parser.add_argument('--feature_dir', type=str, default='./feature_dir',
                         help='directory where extracted features are saved')
     parser.add_argument('-c', '--config', type=int, default=1, choices=configurations.keys(),
                         help='the number of settings and hyperparameters used in training')
     parser.add_argument('--batch_size', type=int, default=32, help='batch size')
-    parser.add_argument('--resume', type=str, default='', help='checkpoint file')
-    parser.add_argument('--weight_file', type=str, default='/path/to/weight_file.pkl', help='weight file')
+    parser.add_argument('--resume', type=str, default='./pretrained/senet50_scratch_weight.pkl', help='checkpoint file')
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                         help='number of data loading workers (default: 4)')
@@ -75,13 +73,14 @@ def main():
     resume = args.resume
 
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)
+
     cuda = torch.cuda.is_available()
+
     if cuda:
         print("torch.backends.cudnn.version: {}".format(torch.backends.cudnn.version()))
-
-    torch.manual_seed(1337)
-    if cuda:
         torch.cuda.manual_seed(1337)
+    else:
+        torch.manual_seed(1337)
 
     # 0. id label map
     meta_file = args.meta_file
@@ -97,38 +96,30 @@ def main():
     if args.cmd == 'train':
         dt = datasets.VGG_Faces2(root, train_img_list_file, id_label_dict, split='train')
         train_loader = torch.utils.data.DataLoader(dt, batch_size=args.batch_size, shuffle=True, **kwargs)
-
-    dv = datasets.VGG_Faces2(root, test_img_list_file, id_label_dict, split='valid',
-                             horizontal_flip=args.horizontal_flip)
-    val_loader = torch.utils.data.DataLoader(dv, batch_size=args.batch_size, shuffle=False, **kwargs)
+    # else:
+    #     dv = datasets.VGG_Faces2(root, test_img_list_file, id_label_dict, split='valid',
+    #                             horizontal_flip=args.horizontal_flip)
+    #     val_loader = torch.utils.data.DataLoader(dv, batch_size=args.batch_size, shuffle=False, **kwargs)
 
     # 2. model
-    include_top = True if args.cmd != 'extract' else False
-    if 'resnet' in args.arch_type:
-        model = ResNet.resnet50(num_classes=N_IDENTITY, include_top=include_top)
+    if args.cmd != 'extract':
+        include_top = True
     else:
-        model = SENet.senet50(num_classes=N_IDENTITY, include_top=include_top)
-    # print(model)
+        include_top = False
 
-    start_epoch = 0
-    start_iteration = 0
-    if resume:
-        checkpoint = torch.load(resume)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        start_epoch = checkpoint['epoch']
-        start_iteration = checkpoint['iteration']
-        assert checkpoint['arch'] == args.arch_type
-        print("Resume from epoch: {}, iteration: {}".format(start_epoch, start_iteration))
-    else:
-        utils.load_state_dict(model, args.weight_file)
-        if args.cmd == 'train':
-            model.fc.reset_parameters()
+    model = SENet.senet50(num_classes=N_IDENTITY, include_top=include_top)
+
+    checkpoint = torch.load(resume)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    start_epoch = checkpoint['epoch']
+    start_iteration = checkpoint['iteration']
+    assert checkpoint['arch'] == args.arch_type
+    print("Resume from epoch: {}, iteration: {}".format(start_epoch, start_iteration))
+
+    criterion = nn.CrossEntropyLoss()
 
     if cuda:
         model = model.cuda()
-
-    criterion = nn.CrossEntropyLoss()
-    if cuda:
         criterion = criterion.cuda()
 
     # 3. optimizer
@@ -141,13 +132,11 @@ def main():
             lr=cfg['lr'],
             momentum=cfg['momentum'],
             weight_decay=cfg['weight_decay'])
-        if resume:
-            optim.load_state_dict(checkpoint['optim_state_dict'])
+
+        optim.load_state_dict(checkpoint['optim_state_dict'])
     
-        # lr_policy: step
-        last_epoch = start_iteration if resume else -1
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optim,  cfg['step_size'],
-                                                       gamma=cfg['gamma'], last_epoch=last_epoch)
+        last_epoch = start_iteration
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optim,  cfg['step_size'], gamma=cfg['gamma'], last_epoch=last_epoch)
 
     if args.cmd == 'train':
         trainer = Trainer(

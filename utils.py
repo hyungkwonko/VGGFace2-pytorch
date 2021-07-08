@@ -1,7 +1,7 @@
 import pandas as pd
+import numpy as np
 import csv
 import os
-import sys
 import torch
 import shutil
 import pickle
@@ -88,3 +88,12 @@ def accuracy(output, target, topk=(1,)):
 def create_dir(dir_name):
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
+
+
+def change_file_names():
+    LOC = 'train'
+    load_loc = os.path.join('datasets', 'generated', LOC, 'npy', 'files3.npy')
+    save_loc = os.path.join('datasets', 'generated', LOC, 'npy', 'files.npy')
+    x = np.load(load_loc)
+    out = [z.replace('assets/train/', '') for z in x]
+    np.save(save_loc, out)

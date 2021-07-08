@@ -58,11 +58,13 @@ class VGG_Faces2(data.Dataset):
         img_file = info['img']
         img = PIL.Image.open(os.path.join(self.root, img_file))
         img = torchvision.transforms.Resize(256)(img)
+
         if self.split == 'train':
             img = torchvision.transforms.RandomCrop(224)(img)
             img = torchvision.transforms.RandomGrayscale(p=0.2)(img)
         else:
             img = torchvision.transforms.CenterCrop(224)(img)
+
         if self.horizontal_flip:
             img = torchvision.transforms.functional.hflip(img)
 
