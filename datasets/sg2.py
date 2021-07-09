@@ -26,18 +26,20 @@ class StyleGAN2_Data(datasets.ImageFolder):
             else:
                 self.labels = self.scale_label(self.labels_original)
 
-        if split == 'val':
+        elif split == 'val' or 'test':
             self.labels_original = np.load(os.path.join(root, 'train', 'npy', 'landmarks.npy'))
             if scale_size > 0:
                 self.scale_label(self.labels_original / scale_size * INPUT_SIZE)
             else:
                 self.scale_label(self.labels_original)
 
-            self.labels_original = np.load(os.path.join(root, 'val', 'npy', 'landmarks.npy'))
+            self.labels_original = np.load(os.path.join(root, split, 'npy', 'landmarks.npy'))
             if scale_size > 0:
                 self.labels = self.scale_val_label(self.labels_original / scale_size * INPUT_SIZE)
             else:
                 self.labels = self.scale_val_label(self.labels_original)
+        else:
+            raise ValueError(f"split was not set correctly split = ['train', 'val', 'test'] not {split}")
 
         self.files = np.load(os.path.join(root, split, 'npy', 'files.npy'))
 

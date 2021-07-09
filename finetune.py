@@ -105,13 +105,13 @@ def train_model(args, model, data, data_loader, criterion, optimizer, scheduler,
                 if epoch_loss < best_loss:
                     best_loss = epoch_loss
                     best_model_wts = copy.deepcopy(model.state_dict())
-                    torch.save(best_model_wts, os.path.join(args.ckpt_dir, f'senet_ckpt_{args.lr}.pth'))
+                    torch.save(best_model_wts, os.path.join(args.ckpt_dir, f'senet_ckpt_{args.lr}_{args.weight_decay}_{args.feature_extract}.pth'))
 
                 if save_fig and epoch % args.save_epoch == 0:
                     outputs = outputs.cpu().numpy()          
 
                     for i, (index, output) in enumerate(zip(indices, outputs)):
-                        if i > 5:
+                        if i > 3:
                             break
                         output = output.reshape(1, -1)
                         pred = data[phase].inv_scale_label(output)
@@ -142,8 +142,8 @@ def set_parameter_requires_grad(model, feature_extracting):
 
 
 def initialize_model(args):
-    model = SENet.senet50(num_classes=args.n_identity, include_top=True)  # output w/ FC layer (dim: 138=NUM_OUT_FT)
-    # model = SENet.senet50(num_classes=N_IDENTITY, include_top=False)  # output w/o FC layer (dim: 2048)
+    model = SENet.senet50(num_classes=args.n_identity, include_top=True)  # forward output w/ FC layer (dim: 138=NUM_OUT_FT)
+    # model = SENet.senet50(num_classes=N_IDENTITY, include_top=False)  # forward output w/o FC layer (dim: 2048)
     load_state_dict(model, args.model_path)
     set_parameter_requires_grad(model, args.feature_extract)
     num_in_ft = model.fc.in_features  # 2048
@@ -159,8 +159,9 @@ def main():
     parser.add_argument('--out_features', type=int, default=136, help='number of classes == y')
     parser.add_argument('--batch_size', type=int, default=128, help='batch size')
     parser.add_argument('--num_epochs', type=int, default=30, help='number of epochs to run')
-    parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
-    parser.add_argument('--feature_extract', type=bool, default=True, help='finetune fc layer only (True) / all layers (False)')
+    parser.add_argument('--lr', type=float, default=1e-5, help='learning rate')
+    parser.add_argument('--weight_decay', type=float, default=1e-5, help='l2 norm')
+    parser.add_argument('--feature_extract', type=int, choices=[0, 1], default=1, help='finetune fc layer only (True, 1) / all layers (False, 0)')
 
     parser.add_argument('--root', type=str, default='./datasets/generated', help='training data dir')
     parser.add_argument('--model_path', type=str, default='./pretrained/senet50_scratch_weight.pkl', help='pretrained SENet model path')
@@ -234,7 +235,7 @@ def main():
             if param.requires_grad == True:
                 logging.info(f'{i}: {name}')
 
-    optimizer = optim.Adam(params_to_update, lr=args.lr)
+    optimizer = optim.Adam(params_to_update, lr=args.lr, weight_decay=1e-5)  # l2 norm
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
     criterion = nn.MSELoss()
 
